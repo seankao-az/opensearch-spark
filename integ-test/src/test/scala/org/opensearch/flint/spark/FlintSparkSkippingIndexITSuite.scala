@@ -6,6 +6,8 @@
 package org.opensearch.flint.spark
 
 import com.stephenn.scalatest.jsonassert.JsonMatchers.matchJson
+import java.util.Base64
+import org.apache.hadoop.shaded.javax.xml.bind.DatatypeConverter
 import org.opensearch.flint.OpenSearchSuite
 import org.opensearch.flint.spark.FlintSpark.RefreshMode.{FULL, INCREMENTAL}
 import org.opensearch.flint.spark.FlintSparkIndex.ID_COLUMN
@@ -625,6 +627,43 @@ class FlintSparkSkippingIndexITSuite
     query.queryExecution.executedPlan should
       useFlintSparkSkippingFileIndex(hasIndexFilter(
         col("varchar_col") === "sample varchar" && col("char_col") === paddedChar))
+
+    flint.deleteIndex(testIndex)
+  }
+
+  test("can build index for binary") {
+    val testTable = "default.binary_table"
+    val testIndex = getSkippingIndexName(testTable)
+    val sampleBinary = "sample binary".getBytes
+    val sampleBinaryHexString = DatatypeConverter.printHexBinary(sampleBinary)
+    sql(
+      s"""
+         | CREATE TABLE $testTable
+         | (
+         |   binary_col BINARY
+         | )
+         | USING PARQUET
+         |""".stripMargin)
+    sql(
+      s"""
+         | INSERT INTO $testTable
+         | VALUES (
+         |   X\"$sampleBinaryHexString\"
+         |)
+         |""".stripMargin)
+
+    // OpenSearch does not support binary field searching, thus cannot filter on binary_col
+    // TODO: Switch to covering index once available
+    flint
+      .skippingIndex()
+      .onTable(testTable)
+      .addValueSet("binary_col")
+      .create()
+    flint.refreshIndex(testIndex, FULL)
+
+    val indexData = flint.queryIndex(testIndex).select("binary_col").first()
+    // TODO: bug in FlintDataType deserialize: for ValueSet index, deserialized type should be Array
+    indexData should be(Row("[\"" + Base64.getEncoder().encodeToString(sampleBinary) + "\"]"))
 
     flint.deleteIndex(testIndex)
   }

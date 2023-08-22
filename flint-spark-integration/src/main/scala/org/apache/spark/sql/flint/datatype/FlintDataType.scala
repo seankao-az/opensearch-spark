@@ -75,6 +75,11 @@ object FlintDataType {
         metadataBuilder.putString("osType", "text")
         StringType
 
+      // Binary
+      // Flint (OpenSearch) stores binary as base64 encoded string
+      // To read it using Spark, we need StringType instead of BinaryType
+      case JString("binary") => StringType
+
       // object types
       case JString("object") | JNothing => deserializeJValue(fieldProperties)
 
@@ -145,6 +150,9 @@ object FlintDataType {
           "type" -> JString("date"),
           "format" -> JString("strict_date_optional_time_nanos"));
       case DateType => JObject("type" -> JString("date"), "format" -> JString("strict_date"));
+
+      // Binary
+      case BinaryType => JObject("type" -> JString("binary"))
 
       // objects
       case st: StructType => serializeJValue(st)

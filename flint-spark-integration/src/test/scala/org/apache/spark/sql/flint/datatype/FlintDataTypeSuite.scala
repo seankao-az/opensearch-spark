@@ -146,6 +146,25 @@ class FlintDataTypeSuite extends FlintSuite with Matchers {
         Nil)
   }
 
+  test("spark binary type serialize and deserialize") {
+    val flintDataType =
+      """{
+        |  "properties": {
+        |    "binaryField": {
+        |      "type": "binary"
+        |    }
+        |  }
+        |}""".stripMargin
+    val sparkStructType = StructType(
+      StructField("binaryField", BinaryType, true) ::
+        Nil)
+    FlintDataType.serialize(sparkStructType) shouldBe compactJson(flintDataType)
+    // flint data type should not deserialize to binary, as its stored as base64 encoded string
+    FlintDataType.deserialize(flintDataType) should contain theSameElementsAs StructType(
+      StructField("binaryField", StringType, true) ::
+        Nil)
+  }
+
   test("flint date type deserialize and serialize") {
     val flintDataType = """{
                           |  "properties": {

@@ -29,8 +29,10 @@ import org.apache.spark.sql.catalog.Column
 import org.apache.spark.sql.flint.FlintDataSourceV2.FLINT_DATASOURCE
 import org.apache.spark.sql.flint.config.FlintSparkConf
 import org.apache.spark.sql.flint.config.FlintSparkConf.{DOC_ID_COLUMN_NAME, IGNORE_DOC_ID_COLUMN}
+import org.apache.spark.sql.functions.base64
 import org.apache.spark.sql.streaming.OutputMode.Append
 import org.apache.spark.sql.streaming.StreamingQuery
+import org.apache.spark.sql.types._
 
 /**
  * Flint Spark integration API entrypoint.
@@ -91,10 +93,38 @@ class FlintSpark(val spark: SparkSession) {
       .getOrElse(throw new IllegalStateException(s"Index $indexName doesn't exist"))
     val tableName = getSourceTableName(index)
 
+    // Recursive function to replace binary types with Base64 encoded strings
+    // TODO: Array, Map, Struct not fully tested
+    def processColumn(df: DataFrame, columnName: String, dataType: DataType): DataFrame = {
+      dataType match {
+        // Encoded base64 is no longer BinaryType. It becomes StringType
+        case BinaryType => df.withColumn(columnName, base64(df(columnName)))
+        case ArrayType(elementType, _) =>
+          processColumn(df, columnName, elementType)
+        case MapType(keyType, valueType, _) =>
+          processColumn(
+            processColumn(df, s"map_keys($columnName)", keyType),
+             s"map_values($columnName)", valueType)
+        case StructType(fields) =>
+          fields.foldLeft(df) { (updatedDF, field) =>
+            val nestedColumnName = columnName + "." + field.name
+            processColumn(updatedDF, nestedColumnName, field.dataType)
+          }
+        case _ => df
+      }
+    }
+
+    def transformDF(df: DataFrame): DataFrame = {
+      df.schema.fields.foldLeft(df) { (updatedDF, field) =>
+        processColumn(updatedDF, field.name, field.dataType)
+      }
+    }
+
     // Write Flint index data to Flint data source (shared by both refresh modes for now)
     def writeFlintIndex(df: DataFrame): Unit = {
+      val debug = index.build(transformDF(df)).collect()
       index
-        .build(df)
+        .build(transformDF(df))
         .write
         .format(FLINT_DATASOURCE)
         .options(flintSparkConf.properties)

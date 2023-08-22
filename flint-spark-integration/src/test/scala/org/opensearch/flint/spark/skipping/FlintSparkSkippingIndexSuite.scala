@@ -137,6 +137,31 @@ class FlintSparkSkippingIndexSuite extends FlintSuite {
          |""".stripMargin)
   }
 
+  test("can build index for binary column") {
+    val indexCol = mock[FlintSparkSkippingStrategy]
+    when(indexCol.outputSchema()).thenReturn(Map("binary_col" -> "binary"))
+    when(indexCol.getAggregators).thenReturn(Seq(CollectSet(col("binary_col").expr)))
+
+    val index = new FlintSparkSkippingIndex("default.test", Seq(indexCol))
+    index.metadata().getContent should matchJson(
+      s"""{
+         |   "_meta": {
+         |     "kind": "skipping",
+         |     "indexedColumns": [{}],
+         |     "source": "default.test"
+         |   },
+         |   "properties": {
+         |     "binary_col": {
+         |       "type": "binary"
+         |     },
+         |     "file_path": {
+         |       "type": "keyword"
+         |     }
+         |   }
+         | }
+         |""".stripMargin)
+  }
+
   test("can build index for long column") {
     val indexCol = mock[FlintSparkSkippingStrategy]
     when(indexCol.outputSchema()).thenReturn(Map("long_col" -> "bigint"))

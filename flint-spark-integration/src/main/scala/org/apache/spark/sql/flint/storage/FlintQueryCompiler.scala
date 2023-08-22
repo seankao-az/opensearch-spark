@@ -48,6 +48,7 @@ case class FlintQueryCompiler(schema: StructType) {
   }
 
   def extract(value: Any, dataType: DataType): String = dataType match {
+    case BinaryType => "ZXhhbXBsZQ==" // TODO: throw exception; search Binary not supported in OS
     case TimestampType =>
       TimestampFormatter(
         STRICT_DATE_OPTIONAL_TIME_FORMATTER_WITH_NANOS,
