@@ -12,6 +12,7 @@ import org.opensearch.client.indices.GetIndexRequest;
 import org.opensearch.flint.core.FlintMetadataLogService;
 import org.opensearch.flint.core.IRestHighLevelClient;
 import org.opensearch.flint.core.metadata.log.DefaultOptimisticTransaction;
+import org.opensearch.flint.core.metadata.log.FlintMetadataLog;
 import org.opensearch.flint.core.metadata.log.FlintMetadataLogEntry;
 import org.opensearch.flint.core.metadata.log.OptimisticTransaction;
 import scala.Some;
@@ -33,9 +34,11 @@ public class FlintOpenSearchMetadataLogService implements FlintMetadataLogServic
     this.indexOperationService = indexOperationService;
   }
 
+  // TODO: use getIndexMetadataLog
   @Override
   public <T> OptimisticTransaction<T> startTransaction(
       String indexName, String dataSourceName, boolean forceInit) {
+    // TODO: might be a bug for original FlintOpenSearchClient: indexName here needs sanitize too
     LOG.info("Starting transaction on index " + indexName + " and data source " + dataSourceName);
     String metaLogIndexName = constructMetaLogIndexName(dataSourceName);
     try (IRestHighLevelClient client = (IRestHighLevelClient) createClient()) {
@@ -62,6 +65,36 @@ public class FlintOpenSearchMetadataLogService implements FlintMetadataLogServic
   @Override
   public <T> OptimisticTransaction<T> startTransaction(String indexName, String dataSourceName) {
     return startTransaction(indexName, dataSourceName, false);
+  }
+
+  @Override
+  public FlintMetadataLog<FlintMetadataLogEntry> getIndexMetadataLog(String indexName, String dataSourceName, boolean forceInit) {
+    // TODO: might be a bug for original FlintOpenSearchClient: indexName here needs sanitize too
+    // passed in indexName can be sanitized or not (get v.s. getAll)
+    LOG.info("Getting metadata log for index " + indexName + " and data source " + dataSourceName);
+    String metaLogIndexName = constructMetaLogIndexName(dataSourceName);
+    try (IRestHighLevelClient client = (IRestHighLevelClient) createClient()) {
+      if (client.doesIndexExist(new GetIndexRequest(metaLogIndexName), RequestOptions.DEFAULT)) {
+        LOG.info("Found metadata log index " + metaLogIndexName);
+      } else {
+        if (forceInit) {
+          indexOperationService.createIndex(metaLogIndexName, FlintMetadataLogEntry.QUERY_EXECUTION_REQUEST_MAPPING(),
+              Some.apply(FlintMetadataLogEntry.QUERY_EXECUTION_REQUEST_SETTINGS()));
+        } else {
+          String errorMsg = "Metadata log index not found " + metaLogIndexName;
+          LOG.warning(errorMsg);
+          throw new IllegalStateException(errorMsg);
+        }
+      }
+      return new FlintOpenSearchMetadataLog(this, indexName, metaLogIndexName);
+    } catch (IOException e) {
+      throw new IllegalStateException("Failed to check if index metadata log index exists " + metaLogIndexName, e);
+    }
+  }
+
+  @Override
+  public FlintMetadataLog<FlintMetadataLogEntry> getIndexMetadataLog(String indexName, String dataSourceName) {
+    return getIndexMetadataLog(indexName, dataSourceName, false);
   }
 
   // TODO: since this depends on indexOperationService anyways, clientFactory is not required at all. Just use indexOperationService.createClient()

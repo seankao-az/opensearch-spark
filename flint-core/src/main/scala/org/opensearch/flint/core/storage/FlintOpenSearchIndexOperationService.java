@@ -8,16 +8,17 @@ package org.opensearch.flint.core.storage;
 import static org.opensearch.common.xcontent.DeprecationHandler.IGNORE_DEPRECATIONS;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Locale;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
+
 import org.opensearch.action.admin.indices.delete.DeleteIndexRequest;
 import org.opensearch.client.RequestOptions;
 import org.opensearch.client.indices.CreateIndexRequest;
 import org.opensearch.client.indices.GetIndexRequest;
+import org.opensearch.client.indices.GetIndexResponse;
 import org.opensearch.client.indices.PutMappingRequest;
+import org.opensearch.cluster.metadata.MappingMetadata;
 import org.opensearch.common.Strings;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.xcontent.NamedXContentRegistry;
@@ -116,6 +117,41 @@ public class FlintOpenSearchIndexOperationService implements FlintIndexOperation
       client.deleteIndex(request, RequestOptions.DEFAULT);
     } catch (Exception e) {
       throw new IllegalStateException("Failed to delete Flint index " + osIndexName, e);
+    }
+  }
+
+  @Override
+  public String[] getIndex(String indexName) {
+    LOG.info("Fetching Flint index for " + indexName);
+    String osIndexName = sanitizeIndexName(indexName);
+    try (IRestHighLevelClient client = (IRestHighLevelClient) createClient()) {
+      GetIndexRequest request = new GetIndexRequest(osIndexName);
+      GetIndexResponse response = client.getIndex(request, RequestOptions.DEFAULT);
+
+      MappingMetadata mapping = response.getMappings().get(osIndexName);
+      Settings settings = response.getSettings().get(osIndexName);
+      return new String[]{mapping.source().string(), settings.toString()};
+    } catch (Exception e) {
+      throw new IllegalStateException("Failed to get Flint index for " + osIndexName, e);
+    }
+  }
+
+  @Override
+  public List<String[]> getAllIndex(String indexNamePattern) {
+    LOG.info("Fetching all Flint index for pattern " + indexNamePattern);
+    String osIndexNamePattern = sanitizeIndexName(indexNamePattern);
+    try (IRestHighLevelClient client = (IRestHighLevelClient) createClient()) {
+      GetIndexRequest request = new GetIndexRequest(osIndexNamePattern);
+      GetIndexResponse response = client.getIndex(request, RequestOptions.DEFAULT);
+
+      return Arrays.stream(response.getIndices())
+          .map(index -> new String[]{
+              index,
+              response.getMappings().get(index).source().toString(),
+              response.getSettings().get(index).toString()})
+          .collect(Collectors.toList());
+    } catch (Exception e) {
+      throw new IllegalStateException("Failed to get Flint index for " + osIndexNamePattern, e);
     }
   }
 

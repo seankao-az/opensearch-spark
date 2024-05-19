@@ -5,6 +5,7 @@
 
 package org.opensearch.flint.core;
 
+import java.util.List;
 import org.opensearch.flint.core.metadata.FlintMetadata;
 import org.opensearch.flint.core.storage.FlintReader;
 import org.opensearch.flint.core.storage.FlintWriter;
@@ -41,6 +42,10 @@ public interface FlintIndexOperationService {
    * @param indexName index name
    */
   void deleteIndex(String indexName);
+
+  // TODO: better return type
+  String[] getIndex(String indexName);
+  List<String[]> getAllIndex(String indexNamePattern);
 
   /**
    * Create {@link FlintReader}.
