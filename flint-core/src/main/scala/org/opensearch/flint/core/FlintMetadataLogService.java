@@ -5,6 +5,7 @@
 
 package org.opensearch.flint.core;
 
+import java.util.Optional;
 import org.opensearch.flint.core.metadata.log.FlintMetadataLog;
 import org.opensearch.flint.core.metadata.log.FlintMetadataLogEntry;
 import org.opensearch.flint.core.metadata.log.OptimisticTransaction;
@@ -32,8 +33,8 @@ public interface FlintMetadataLogService {
   <T> OptimisticTransaction<T> startTransaction(String indexName, String dataSourceName,
                                                 boolean forceInit);
 
-  FlintMetadataLog<FlintMetadataLogEntry> getIndexMetadataLog(String indexName, String dataSourceName);
-  FlintMetadataLog<FlintMetadataLogEntry> getIndexMetadataLog(String indexName, String dataSourceName, boolean forceInit);
+  Optional<FlintMetadataLog<FlintMetadataLogEntry>> getIndexMetadataLog(String indexName, String dataSourceName);
+  Optional<FlintMetadataLog<FlintMetadataLogEntry>> getIndexMetadataLog(String indexName, String dataSourceName, boolean forceInit);
 
   /**
    * Create {@link Object}.

@@ -6,6 +6,7 @@
 package org.opensearch.flint.core.storage;
 
 import java.io.IOException;
+import java.util.Optional;
 import java.util.logging.Logger;
 import org.opensearch.client.RequestOptions;
 import org.opensearch.client.indices.GetIndexRequest;
@@ -68,7 +69,7 @@ public class FlintOpenSearchMetadataLogService implements FlintMetadataLogServic
   }
 
   @Override
-  public FlintMetadataLog<FlintMetadataLogEntry> getIndexMetadataLog(String indexName, String dataSourceName, boolean forceInit) {
+  public Optional<FlintMetadataLog<FlintMetadataLogEntry>> getIndexMetadataLog(String indexName, String dataSourceName, boolean forceInit) {
     // TODO: might be a bug for original FlintOpenSearchClient: indexName here needs sanitize too
     // passed in indexName can be sanitized or not (get v.s. getAll)
     LOG.info("Getting metadata log for index " + indexName + " and data source " + dataSourceName);
@@ -83,17 +84,17 @@ public class FlintOpenSearchMetadataLogService implements FlintMetadataLogServic
         } else {
           String errorMsg = "Metadata log index not found " + metaLogIndexName;
           LOG.warning(errorMsg);
-          throw new IllegalStateException(errorMsg);
+          return Optional.empty();
         }
       }
-      return new FlintOpenSearchMetadataLog(this, indexName, metaLogIndexName);
+      return Optional.of(new FlintOpenSearchMetadataLog(this, indexName, metaLogIndexName));
     } catch (IOException e) {
       throw new IllegalStateException("Failed to check if index metadata log index exists " + metaLogIndexName, e);
     }
   }
 
   @Override
-  public FlintMetadataLog<FlintMetadataLogEntry> getIndexMetadataLog(String indexName, String dataSourceName) {
+  public Optional<FlintMetadataLog<FlintMetadataLogEntry>> getIndexMetadataLog(String indexName, String dataSourceName) {
     return getIndexMetadataLog(indexName, dataSourceName, false);
   }
 

@@ -101,13 +101,10 @@ public class FlintClientImpl implements FlintClient {
    */
   private FlintMetadata constructFlintMetadata(String indexName, String mapping, String settings) {
     String dataSourceName = options.getDataSourceName();
-    FlintMetadataLog metadataLog = metadataLogService.getIndexMetadataLog(indexName, dataSourceName);
-    Optional<FlintMetadataLogEntry> latest = metadataLog.getLatest();
-
-    if (latest.isEmpty()) {
-      return FlintMetadata.apply(mapping, settings);
-    } else {
-      return FlintMetadata.apply(mapping, settings, latest.get());
-    }
+    Optional<FlintMetadataLogEntry> latest = metadataLogService.getIndexMetadataLog(indexName, dataSourceName)
+        .flatMap(FlintMetadataLog::getLatest);
+    return latest
+        .map(entry -> FlintMetadata.apply(mapping, settings, entry))
+        .orElseGet(() -> FlintMetadata.apply(mapping, settings));
   }
 }
