@@ -5,6 +5,8 @@
 
 package org.opensearch.flint.spark.ppl
 
+import org.opensearch.sql.common.antlr.SyntaxCheckException
+
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Literal, SortOrder}
@@ -65,6 +67,21 @@ class FlintSparkPPLBasicITSuite
       // Compare the two plans
       assert(expectedPlan === logicalPlan)
     }
+  }
+
+  test("parse error test") {
+    spark.sparkContext.setLocalProperty("spark.sql.local.queryLanguage", "ppl")
+
+    val thrown = intercept[SyntaxCheckException] {
+      sql(s"""
+           | source = $testTable| invalid_command
+           |""".stripMargin)
+    }
+    assert(
+      thrown.getMessage.contains(
+        "Failed to parse query due to offending symbol [invalid_command]"))
+
+    spark.sparkContext.setLocalProperty("spark.sql.local.queryLanguage", null)
   }
 
   test("create ppl simple query with head (limit) 3 test") {

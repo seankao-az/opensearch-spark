@@ -31,6 +31,7 @@ import org.opensearch.flint.spark.ppl.PlaneUtils.plan
 import org.opensearch.sql.common.antlr.SyntaxCheckException
 import org.opensearch.sql.ppl.{CatalystPlanContext, CatalystQueryPlanVisitor}
 
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser._
@@ -44,23 +45,36 @@ import org.apache.spark.sql.types.{DataType, StructType}
  * @param sparkParser
  *   Spark SQL parser
  */
-class FlintSparkPPLParser(sparkParser: ParserInterface) extends ParserInterface {
+class FlintSparkPPLParser(sparkSession: SparkSession, sparkParser: ParserInterface)
+    extends ParserInterface {
 
   /** OpenSearch (PPL) AST builder. */
   private val planTrnasormer = new CatalystQueryPlanVisitor()
 
   private val pplParser = new PPLSyntaxParser()
 
-  override def parsePlan(sqlText: String): LogicalPlan = {
-    try {
-      // if successful build ppl logical plan and translate to catalyst logical plan
-      val context = new CatalystPlanContext
-      planTrnasormer.visit(plan(pplParser, sqlText, false), context)
-      context.getPlan
-    } catch {
-      // Fall back to Spark parse plan logic if flint cannot parse
-      case _: ParseException | _: SyntaxCheckException => sparkParser.parsePlan(sqlText)
+  override def parsePlan(queryText: String): LogicalPlan = {
+    val language = sparkSession.sparkContext.getLocalProperty("spark.sql.local.queryLanguage")
+    language match {
+      case "ppl" => parsePplPlan(queryText)
+      case "sql" | null =>
+        // For backward compatibility
+        try {
+          parsePplPlan(queryText)
+        } catch {
+          // Swallows error message for PPL parser
+          // Fall back to Spark parse plan logic if flint cannot parse as PPL
+          case _: ParseException | _: SyntaxCheckException => sparkParser.parsePlan(queryText)
+        }
+      case _ => throw new IllegalArgumentException(s"Unsupported language: $language")
     }
+  }
+
+  private def parsePplPlan(queryText: String): LogicalPlan = {
+    // build ppl logical plan and translate to catalyst logical plan
+    val context = new CatalystPlanContext
+    planTrnasormer.visit(plan(pplParser, queryText, false), context)
+    context.getPlan
   }
 
   override def parseExpression(sqlText: String): Expression = sparkParser.parseExpression(sqlText)
