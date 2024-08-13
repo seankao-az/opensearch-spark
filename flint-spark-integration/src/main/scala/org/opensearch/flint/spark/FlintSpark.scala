@@ -143,6 +143,7 @@ class FlintSpark(val spark: SparkSession) extends FlintSparkTransactionSupport w
           if (indexRefresh.refreshMode == AUTO) {
             logInfo("Scheduling index state monitor")
             flintIndexMonitor.startMonitor(indexName)
+            configCatalogConfForRefreshInterval(index)
             latest
           } else {
             logInfo("Updating index state to active")
@@ -294,9 +295,11 @@ class FlintSpark(val spark: SparkSession) extends FlintSparkTransactionSupport w
             latest.copy(state = REFRESHING)
           })
           .commit(_ => {
-            FlintSparkIndexRefresh
-              .create(indexName, index.get)
-              .start(spark, flintSparkConf)
+            val indexRefresh = FlintSparkIndexRefresh.create(indexName, index.get)
+            if (indexRefresh.refreshMode == AUTO) {
+              configCatalogConfForRefreshInterval(index.get)
+            }
+            indexRefresh.start(spark, flintSparkConf)
             true
           })
       } else {
@@ -455,7 +458,17 @@ class FlintSpark(val spark: SparkSession) extends FlintSparkTransactionSupport w
       .commit(_ => {
         flintClient.updateIndex(indexName, index.metadata)
         logInfo("Update index options complete")
+        configCatalogConfForRefreshInterval(index)
         indexRefresh.start(spark, flintSparkConf)
       })
+  }
+
+  private def configCatalogConfForRefreshInterval(index: FlintSparkIndex): Unit = {
+    // This config is required only by some custom catalog. But we don't check the specific catalog here.
+    if (index.options.refreshInterval.isDefined) {
+      spark.sparkContext.getConf.set(
+        s"spark.sql.catalog.${flintSparkConf.flintOptions().getDataSourceName}.refreshInterval",
+        index.options.refreshInterval.get)
+    }
   }
 }
