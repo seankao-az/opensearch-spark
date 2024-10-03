@@ -17,7 +17,7 @@ import org.opensearch.flint.common.scheduler.AsyncQueryScheduler
 import org.opensearch.flint.core.{FlintClient, FlintClientBuilder}
 import org.opensearch.flint.core.metadata.FlintIndexMetadataServiceBuilder
 import org.opensearch.flint.core.metadata.log.FlintMetadataLogServiceBuilder
-import org.opensearch.flint.core.storage.FlintOpenSearchMetadataCacheWrite
+import org.opensearch.flint.core.storage.FlintOpenSearchMetadataCacheWriter
 import org.opensearch.flint.spark.FlintSparkIndex.ID_COLUMN
 import org.opensearch.flint.spark.FlintSparkIndexOptions.OptionName._
 import org.opensearch.flint.spark.covering.FlintSparkCoveringIndex
@@ -55,7 +55,7 @@ class FlintSpark(val spark: SparkSession) extends FlintSparkTransactionSupport w
     FlintIndexMetadataServiceBuilder.build(flintSparkConf.flintOptions())
   }
 
-  private val flintMetadataCacheWriteService = new FlintOpenSearchMetadataCacheWrite(
+  private val flintMetadataCacheWriteService = new FlintOpenSearchMetadataCacheWriter(
     flintSparkConf.flintOptions())
 
   private val flintAsyncQueryScheduler: AsyncQueryScheduler = {
@@ -143,7 +143,7 @@ class FlintSpark(val spark: SparkSession) extends FlintSparkTransactionSupport w
             if (isMetadataCacheWriteEnabled) {
               flintMetadataCacheWriteService.updateMetadataCache(indexName, metadata)
 
-              // for testing purpose. TODO: remove
+              // for testing purpose. TODO: remove and test through other paths. Add test cases
               flintMetadataCacheWriteService
                 .updateLastRefreshTime(indexName, System.currentTimeMillis)
             }

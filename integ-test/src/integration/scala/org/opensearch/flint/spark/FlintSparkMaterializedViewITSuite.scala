@@ -52,6 +52,8 @@ class FlintSparkMaterializedViewITSuite extends FlintSparkSuite {
   }
 
   test("create materialized view with metadata successfully") {
+    setFlintSparkConf(FlintSparkConf.METADATA_CACHE_WRITE, "true")
+    // Verified through debugger that properties for metadata cache is properly added
     withTempDir { checkpointDir =>
       val indexOptions =
         FlintSparkIndexOptions(
@@ -67,6 +69,8 @@ class FlintSparkMaterializedViewITSuite extends FlintSparkSuite {
         .create()
 
       val index = flint.describeIndex(testFlintIndex)
+      // During describeIndex, we create FlintSparkIndex not using the metadata.properties field,
+      // hence below test still shows properties as empty
       index shouldBe defined
       FlintOpenSearchIndexMetadataService.serialize(index.get.metadata()) should matchJson(s"""
            | {
