@@ -93,6 +93,7 @@ public class FlintRetryOptions implements Serializable {
         .build();
   }
 
+  // TODO: onFailure and onRetry should also acquire rate limiter permit
   private static <T> void onFailure(ExecutionAttemptedEvent<T> event) {
     LOG.severe("Attempt to execute request failed: " + event);
   }

@@ -15,9 +15,11 @@ import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
 import java.util.Map;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.opensearch.action.DocWriteRequest.OpType;
 import org.opensearch.action.DocWriteResponse;
@@ -37,6 +39,8 @@ import org.opensearch.rest.RestStatus;
 class OpenSearchBulkRetryWrapperTest {
 
   private static final long ESTIMATED_SIZE_IN_BYTES = 1000L;
+  @Mock
+  BulkRequestRateLimiter rateLimiter;
   @Mock
   BulkRequest bulkRequest;
   @Mock
@@ -66,11 +70,16 @@ class OpenSearchBulkRetryWrapperTest {
   FlintRetryOptions retryOptionsWithoutRetry = new FlintRetryOptions(
       Map.of("retry.max_retries", "0"));
 
+  @BeforeEach
+  public void setup() throws Exception {
+    Mockito.doNothing().when(rateLimiter).acquirePermit();
+  }
+
   @Test
   public void withRetryWhenCallSucceed() throws Exception {
     MetricsTestUtil.withMetricEnv(verifier -> {
       OpenSearchBulkRetryWrapper bulkRetryWrapper = new OpenSearchBulkRetryWrapper(
-          retryOptionsWithRetry);
+          retryOptionsWithRetry, rateLimiter);
       when(client.bulk(bulkRequest, options)).thenReturn(successResponse);
       when(successResponse.hasFailures()).thenReturn(false);
       when(bulkRequest.estimatedSizeInBytes()).thenReturn(ESTIMATED_SIZE_IN_BYTES);
@@ -90,7 +99,7 @@ class OpenSearchBulkRetryWrapperTest {
   public void withRetryWhenCallConflict() throws Exception {
     MetricsTestUtil.withMetricEnv(verifier -> {
       OpenSearchBulkRetryWrapper bulkRetryWrapper = new OpenSearchBulkRetryWrapper(
-          retryOptionsWithRetry);
+          retryOptionsWithRetry, rateLimiter);
       when(client.bulk(any(), eq(options)))
           .thenReturn(conflictResponse);
       mockConflictResponse();
@@ -112,7 +121,7 @@ class OpenSearchBulkRetryWrapperTest {
   public void withRetryWhenCallFailOnce() throws Exception {
     MetricsTestUtil.withMetricEnv(verifier -> {
       OpenSearchBulkRetryWrapper bulkRetryWrapper = new OpenSearchBulkRetryWrapper(
-          retryOptionsWithRetry);
+          retryOptionsWithRetry, rateLimiter);
       when(client.bulk(any(), eq(options)))
           .thenReturn(failureResponse)
           .thenReturn(successResponse);
@@ -135,7 +144,7 @@ class OpenSearchBulkRetryWrapperTest {
   public void withRetryWhenAllCallFail() throws Exception {
     MetricsTestUtil.withMetricEnv(verifier -> {
       OpenSearchBulkRetryWrapper bulkRetryWrapper = new OpenSearchBulkRetryWrapper(
-          retryOptionsWithRetry);
+          retryOptionsWithRetry, rateLimiter);
       when(client.bulk(any(), eq(options)))
           .thenReturn(failureResponse);
       when(bulkRequest.estimatedSizeInBytes()).thenReturn(ESTIMATED_SIZE_IN_BYTES);
@@ -155,7 +164,7 @@ class OpenSearchBulkRetryWrapperTest {
   public void withRetryWhenCallThrowsShouldNotRetry() throws Exception {
     MetricsTestUtil.withMetricEnv(verifier -> {
       OpenSearchBulkRetryWrapper bulkRetryWrapper = new OpenSearchBulkRetryWrapper(
-          retryOptionsWithRetry);
+          retryOptionsWithRetry, rateLimiter);
       when(client.bulk(bulkRequest, options)).thenThrow(new RuntimeException("test"));
       when(bulkRequest.estimatedSizeInBytes()).thenReturn(ESTIMATED_SIZE_IN_BYTES);
 
@@ -173,7 +182,7 @@ class OpenSearchBulkRetryWrapperTest {
   public void withoutRetryWhenCallFail() throws Exception {
     MetricsTestUtil.withMetricEnv(verifier -> {
       OpenSearchBulkRetryWrapper bulkRetryWrapper = new OpenSearchBulkRetryWrapper(
-          retryOptionsWithoutRetry);
+          retryOptionsWithoutRetry, rateLimiter);
       when(client.bulk(bulkRequest, options))
           .thenReturn(failureResponse);
       when(bulkRequest.estimatedSizeInBytes()).thenReturn(ESTIMATED_SIZE_IN_BYTES);

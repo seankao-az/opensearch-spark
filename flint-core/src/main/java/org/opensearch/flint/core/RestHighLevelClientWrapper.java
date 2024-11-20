@@ -54,7 +54,6 @@ import static org.opensearch.flint.core.metrics.MetricConstants.OS_WRITE_OP_METR
  */
 public class RestHighLevelClientWrapper implements IRestHighLevelClient {
     private final RestHighLevelClient client;
-    private final BulkRequestRateLimiter rateLimiter;
     private final OpenSearchBulkRetryWrapper bulkRetryWrapper;
 
     private final static JacksonJsonpMapper JACKSON_MAPPER = new JacksonJsonpMapper();
@@ -64,22 +63,14 @@ public class RestHighLevelClientWrapper implements IRestHighLevelClient {
      *
      * @param client the RestHighLevelClient instance to wrap
      */
-    public RestHighLevelClientWrapper(RestHighLevelClient client, BulkRequestRateLimiter rateLimiter, OpenSearchBulkRetryWrapper bulkRetryWrapper) {
+    public RestHighLevelClientWrapper(RestHighLevelClient client, OpenSearchBulkRetryWrapper bulkRetryWrapper) {
         this.client = client;
-        this.rateLimiter = rateLimiter;
         this.bulkRetryWrapper = bulkRetryWrapper;
     }
 
     @Override
     public BulkResponse bulk(BulkRequest bulkRequest, RequestOptions options) throws IOException {
-      return execute(() -> {
-        try {
-          rateLimiter.acquirePermit();
-          return bulkRetryWrapper.bulkWithPartialRetry(client, bulkRequest, options);
-        } catch (InterruptedException e) {
-          throw new RuntimeException("rateLimiter.acquirePermit was interrupted.", e);
-        }
-      }, OS_WRITE_OP_METRIC_PREFIX, OS_BULK_OP_METRIC_PREFIX);
+      return execute(() -> bulkRetryWrapper.bulkWithPartialRetry(client, bulkRequest, options), OS_WRITE_OP_METRIC_PREFIX, OS_BULK_OP_METRIC_PREFIX);
     }
 
     @Override

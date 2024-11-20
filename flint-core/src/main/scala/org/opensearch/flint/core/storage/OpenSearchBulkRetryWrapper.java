@@ -30,9 +30,11 @@ public class OpenSearchBulkRetryWrapper {
   private static final Logger LOG = Logger.getLogger(OpenSearchBulkRetryWrapper.class.getName());
 
   private final RetryPolicy<BulkResponse> retryPolicy;
+  private final BulkRequestRateLimiter rateLimiter;
 
-  public OpenSearchBulkRetryWrapper(FlintRetryOptions retryOptions) {
+  public OpenSearchBulkRetryWrapper(FlintRetryOptions retryOptions, BulkRequestRateLimiter rateLimiter) {
     this.retryPolicy = retryOptions.getBulkRetryPolicy(bulkItemRetryableResultPredicate);
+    this.rateLimiter = rateLimiter;
   }
 
   /**
@@ -48,6 +50,8 @@ public class OpenSearchBulkRetryWrapper {
     final AtomicInteger requestCount = new AtomicInteger(0);
     try {
       final AtomicReference<BulkRequest> nextRequest = new AtomicReference<>(bulkRequest);
+      rateLimiter.acquirePermit();
+      // TODO: this retry isn't bounded by rate limiter
       BulkResponse res = Failsafe
           .with(retryPolicy)
           .onFailure((event) -> {
@@ -66,6 +70,8 @@ public class OpenSearchBulkRetryWrapper {
             return response;
           });
       return res;
+    } catch (InterruptedException e) {
+      throw new RuntimeException("rateLimiter.acquirePermit was interrupted.", e);
     } catch (FailsafeException ex) {
       LOG.severe("Request failed permanently. Re-throwing original exception.");
 
