@@ -11,6 +11,7 @@ import dev.failsafe.RetryPolicy;
 import dev.failsafe.function.CheckedPredicate;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Logger;
@@ -50,8 +51,7 @@ public class OpenSearchBulkRetryWrapper {
     final AtomicInteger requestCount = new AtomicInteger(0);
     try {
       final AtomicReference<BulkRequest> nextRequest = new AtomicReference<>(bulkRequest);
-      rateLimiter.acquirePermit();
-      // TODO: this retry isn't bounded by rate limiter
+      final AtomicReference<BulkRequestRateLimiter.Listener> rateLimiterListener = new AtomicReference<>();
       BulkResponse res = Failsafe
           .with(retryPolicy)
           .onFailure((event) -> {
@@ -61,17 +61,40 @@ public class OpenSearchBulkRetryWrapper {
             }
           })
           .get(() -> {
-            requestCount.incrementAndGet();
-            BulkResponse response = client.bulk(nextRequest.get(), options);
-            if (retryPolicy.getConfig().allowsRetries() && bulkItemRetryableResultPredicate.test(
-                response)) {
-              nextRequest.set(getRetryableRequest(nextRequest.get(), response));
+            Optional<BulkRequestRateLimiter.Listener> listener = rateLimiter.acquirePermit();
+            if (listener.isEmpty()) {
+              // TODO: add metric
+              throw new RuntimeException("Failed to acquire rate limiter permit.");
             }
-            return response;
+            rateLimiterListener.set(listener.get());
+
+            BulkResponse response = null;
+            try {
+              requestCount.incrementAndGet();
+              response = client.bulk(nextRequest.get(), options);
+              if (retryPolicy.getConfig().allowsRetries() && bulkItemRetryableResultPredicate.test(
+                  response)) {
+                nextRequest.set(getRetryableRequest(nextRequest.get(), response));
+              }
+              return response;
+            } finally {
+              // TODO: note that these conditions rely on the else-clause
+              if (response == null) {
+                rateLimiterListener.get().onIgnore();
+              } else if (bulkItemRetryableResultPredicate.test(response)) {
+                // Throttling failure should adjust rate limit
+                rateLimiterListener.get().onDropped();
+                // Can't get current limit from BlockingLimiter
+                // LOG.info(String.format("Current rate limit: %d", rateLimiter.getLimit()));
+              } else if (response.hasFailures()) {
+                rateLimiterListener.get().onIgnore();
+              } else {
+                // Request success should adjust rate limit
+                rateLimiterListener.get().onSuccess();
+              }
+            }
           });
       return res;
-    } catch (InterruptedException e) {
-      throw new RuntimeException("rateLimiter.acquirePermit was interrupted.", e);
     } catch (FailsafeException ex) {
       LOG.severe("Request failed permanently. Re-throwing original exception.");
 
