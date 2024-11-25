@@ -22,28 +22,21 @@ import org.apache.spark.internal.Logging
 
 class FlintOpenSearchIndexMetadataService(options: FlintOptions)
     extends FlintIndexMetadataService
+    with OpenSearchIndexRetriever
     with Logging {
 
   override def getIndexMetadata(indexName: String): FlintMetadata = {
     logInfo(s"Fetching Flint index metadata for $indexName")
     val osIndexName = OpenSearchClientUtils.sanitizeIndexName(indexName)
-    var client: IRestHighLevelClient = null
     try {
-      client = OpenSearchClientUtils.createClient(options)
-      val request = new GetIndexRequest(osIndexName)
-      val response = client.getIndex(request, RequestOptions.DEFAULT)
-      val mapping = response.getMappings.get(osIndexName)
-      val settings = response.getSettings.get(osIndexName)
-      FlintOpenSearchIndexMetadataService.deserialize(mapping.source.string, settings.toString)
+      val indexInfo = getIndexInfo(osIndexName, options)
+      FlintOpenSearchIndexMetadataService.deserialize(
+        indexInfo.mapping.source.string,
+        indexInfo.settings.toString)
     } catch {
       case e: Exception =>
-        throw new IllegalStateException(
-          "Failed to get Flint index metadata for " + osIndexName,
-          e)
-    } finally
-      if (client != null) {
-        client.close()
-      }
+        throw new IllegalStateException(s"Failed to get Flint index metadata for $osIndexName", e)
+    }
   }
 
   override def supportsGetByIndexPattern(): Boolean = true

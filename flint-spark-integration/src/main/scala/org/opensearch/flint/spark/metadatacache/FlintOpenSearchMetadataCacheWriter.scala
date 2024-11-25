@@ -12,7 +12,7 @@ import scala.collection.JavaConverters._
 import org.opensearch.client.RequestOptions
 import org.opensearch.client.indices.PutMappingRequest
 import org.opensearch.common.xcontent.XContentType
-import org.opensearch.flint.common.metadata.{FlintIndexMetadataService, FlintMetadata}
+import org.opensearch.flint.common.metadata.FlintMetadata
 import org.opensearch.flint.core.{FlintOptions, IRestHighLevelClient}
 import org.opensearch.flint.core.metadata.FlintIndexMetadataServiceBuilder
 import org.opensearch.flint.core.metadata.FlintJsonHelper._
